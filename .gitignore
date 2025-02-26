@@ -1,3 +1,11 @@
 service_account.json
 .env
-service_account.json
+node_modules
+package-lock.json
+npm-debug.log
+yarn-error.log
+.DS_Store
+.vscode
+.idea
+*.iml
+*.sublime-workspace
