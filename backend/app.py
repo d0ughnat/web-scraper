@@ -1,4 +1,3 @@
-# app.py
 from fastapi import FastAPI, Form
 from fastapi.responses import FileResponse
 import praw
@@ -16,8 +15,9 @@ from googleapiclient.http import MediaFileUpload
 import re
 import random
 import shutil
+import json
 
-# Load environment variables from .env file
+# Load environment variables from .env file (for local development)
 load_dotenv()
 
 app = FastAPI()
@@ -25,7 +25,7 @@ app = FastAPI()
 # Enable CORS to allow React frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "https://web-scraper-henna.vercel.app"],  # React dev server (Vite default)
+    allow_origins=["http://localhost:5173", "https://web-scraper-henna.vercel.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -38,23 +38,29 @@ reddit = praw.Reddit(
     user_agent=os.getenv("USER_AGENT", "webscraper")
 )
 
-# Google Drive setup with service account
-SERVICE_ACCOUNT_FILE = os.path.join(os.path.dirname(__file__), "service_account.json")
+# Google Drive setup with service account from environment variable
 SCOPES = ['https://www.googleapis.com/auth/drive']
-creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+
+# Load service account credentials from environment variable
+service_account_json = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
+if not service_account_json:
+    raise ValueError("GOOGLE_SERVICE_ACCOUNT_JSON environment variable not set")
+
+# Parse the JSON string into a dictionary
+creds_dict = json.loads(service_account_json)
+creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
 drive_service = build('drive', 'v3', credentials=creds)
 
 # Download directory
 DOWNLOAD_DIR = Path("downloads")
 DOWNLOAD_DIR.mkdir(exist_ok=True)
 
-# Your helper functions (download_media, download_with_requests, etc.)
+# Helper functions
 def download_media(url, filename):
     """Download media file with support for YouTube and other video platforms"""
     try:
         filepath = DOWNLOAD_DIR / filename
         
-        # Check if it's a video URL that yt-dlp can handle
         video_platforms = [
             'youtube.com', 'youtu.be', 'reddit.com/r', 'v.redd.it',
             'vimeo.com', 'dailymotion.com', 'facebook.com'
@@ -62,9 +68,9 @@ def download_media(url, filename):
         
         if any(platform in url.lower() for platform in video_platforms):
             ydl_opts = {
-                'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',  # Prioritize mp4 with audio
+                'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
                 'outtmpl': str(filepath),
-                'merge_output_format': 'mp4',          # Merge into mp4
+                'merge_output_format': 'mp4',
                 'postprocessors': [{
                     'key': 'FFmpegVideoConvertor',
                     'preferedformat': 'mp4',
@@ -73,8 +79,8 @@ def download_media(url, filename):
                 }, {
                     'key': 'FFmpegMetadata',
                 }],
-                'prefer_ffmpeg': True,                # Ensure ffmpeg is used for merging
-                'keepvideo': False,                   # Don't keep the video file after merging
+                'prefer_ffmpeg': True,
+                'keepvideo': False,
                 'quiet': True,
                 'no_warnings': True,
             }
@@ -85,10 +91,8 @@ def download_media(url, filename):
                     return str(filepath) if filepath.exists() else None
                 except Exception as e:
                     print(f"yt-dlp download failed: {str(e)}")
-                    # Fallback to regular download if yt-dlp fails
                     return download_with_requests(url, filepath)
         else:
-            # Use regular request download for other media types
             return download_with_requests(url, filepath)
             
     except Exception as e:
@@ -110,7 +114,6 @@ def download_with_requests(url, filepath):
     except Exception as e:
         print(f"Requests download error: {str(e)}")
         return None
-
 
 def extract_folder_id(drive_link):
     """Extract Google Drive folder ID from URL"""
@@ -147,17 +150,16 @@ def upload_to_drive(file_path, folder_id=None):
     except Exception as e:
         print(f"Upload error: {str(e)}")
         return None
-    
+
 def contains_keywords(text, keywords):
+    """Check if text contains any of the provided keywords"""
     if not keywords:
         return True
     text = text.lower()
     return any(keyword.lower() in text for keyword in keywords if keyword.strip())
 
-
 def get_randomized_post_iterator(subreddit_obj, sort_by, limit):
     """Get a randomized iterator of posts from a subreddit"""
-    # First collect posts according to the sort method
     if sort_by == "hot":
         posts = list(subreddit_obj.hot(limit=limit))
     elif sort_by == "new":
@@ -169,33 +171,25 @@ def get_randomized_post_iterator(subreddit_obj, sort_by, limit):
     else:
         posts = list(subreddit_obj.hot(limit=limit))
     
-    # Shuffle the posts for randomization
     random.shuffle(posts)
-    
     return posts
 
 def save_to_local_folder(downloaded_file, local_folder):
     """Save downloaded file to a user-specified local folder"""
     try:
-        # Create destination folder if it doesn't exist
         dest_folder = Path(local_folder)
         dest_folder.mkdir(parents=True, exist_ok=True)
         
-        # Get the filename from the downloaded file path
         filename = Path(downloaded_file).name
-        
-        # Create destination path
         dest_path = dest_folder / filename
         
-        # Copy the file to the destination
         shutil.copy2(downloaded_file, dest_path)
-        
         return str(dest_path)
     except Exception as e:
         print(f"Local save error: {str(e)}")
         return None
 
-# Your FastAPI routes
+# FastAPI routes
 @app.post("/scrape")
 async def scrape_subreddit(
     subreddit: str = Form(...),
@@ -225,7 +219,6 @@ async def scrape_subreddit(
     
     folder_id = extract_folder_id(drive_folder_url) if save_to_drive else None
     
-    # Validate local folder path if saving locally
     if save_locally and not local_folder:
         return {"error": "Please provide a local folder path to save files"}
     
@@ -234,7 +227,6 @@ async def scrape_subreddit(
     
     try:
         subreddit_obj = reddit.subreddit(subreddit)
-        # Get randomized post iterator instead of sequential one
         posts = get_randomized_post_iterator(subreddit_obj, sort_by, limit)
         
         for post in posts:
@@ -247,7 +239,6 @@ async def scrape_subreddit(
                 continue
             
             if scrape_videos and post.is_video:
-                # Use the full Reddit post URL for video downloads
                 video_url = f"https://reddit.com{post.permalink}"
                 filename = f"video_{post.id}.mp4"
                 downloaded = download_media(video_url, filename)
@@ -286,14 +277,12 @@ async def scrape_subreddit(
                         "local_path": local_path
                     })
             
-            # Check if we've reached the download limit
             if download_limit is not None and len(media_files) >= download_limit:
                 break
     
     except Exception as e:
         return {"error": str(e)}
 
-    # Adding randomization stats to the response
     return {
         "subreddit": subreddit,
         "sort_by": sort_by,
@@ -338,7 +327,6 @@ async def list_local_downloads(folder_path: str):
         return {"folder": folder_path, "files": files}
     except Exception as e:
         return {"error": str(e)}
-
 
 if __name__ == "__main__":
     import uvicorn
