@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+praw
+aiohttp
+yt-dlp
+python-dotenv
+python-multipart
+google-auth
+pydrive2
+requests
+opencv-python
+numpy
+
