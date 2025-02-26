@@ -338,3 +338,8 @@ async def list_local_downloads(folder_path: str):
         return {"folder": folder_path, "files": files}
     except Exception as e:
         return {"error": str(e)}
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
