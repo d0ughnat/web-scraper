@@ -25,7 +25,7 @@ app = FastAPI()
 # Enable CORS to allow React frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # React dev server (Vite default)
+    allow_origins=["http://localhost:5173", "https://web-scraper-henna.vercel.app"],  # React dev server (Vite default)
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
