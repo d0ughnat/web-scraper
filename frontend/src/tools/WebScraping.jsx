@@ -1,4 +1,3 @@
-// WebScraping.jsx
 import React, { useState } from 'react';
 import axios from 'axios';
 import './web.css';
@@ -68,14 +67,26 @@ const WebScraping = () => {
     if (formData.localFolder) data.append('local_folder', formData.localFolder);
 
     try {
-      const response = await axios.post('http://localhost:8000/scrape', data);
+      const response = await axios.post('https://web-scraper-fxf1.onrender.com/scrape', data, {
+        headers: {
+          'Client-ID': process.env.REACT_APP_CLIENT_ID,
+          'Client-Secret': process.env.REACT_APP_CLIENT_SECRET,
+          'User-Agent': process.env.REACT_APP_USER_AGENT,
+        },
+      });
       setResults(response.data);
-      
+
       // If local saving was enabled, fetch the list of local files
       if (formData.saveLocally && formData.localFolder) {
         try {
           const localFilesResponse = await axios.get(
-            `http://localhost:8000/local-downloads?folder_path=${encodeURIComponent(formData.localFolder)}`
+            `https://web-scraper-fxf1.onrender.com/local-downloads?folder_path=${encodeURIComponent(formData.localFolder)}`,
+            {
+              headers: {
+                'Client-ID': process.env.REACT_APP_CLIENT_ID,
+                'User-Agent': process.env.REACT_APP_USER_AGENT,
+              },
+            }
           );
           setLocalFiles(localFilesResponse.data);
         } catch (localErr) {
@@ -290,7 +301,7 @@ const WebScraping = () => {
                   Score: {item.score} | Posted: {item.created}
                 </div>
                 <div className="media-links">
-                  <a href={`http://localhost:8000/download/${item.filename}`} download>
+                  <a href={`https://web-scraper-fxf1.onrender.com/download/${item.filename}`} download>
                     Download {item.type}
                   </a>
                   <a href={item.url} target="_blank" rel="noopener noreferrer">
