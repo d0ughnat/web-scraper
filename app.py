@@ -34,8 +34,12 @@ app.add_middleware(
 reddit = praw.Reddit(
     client_id=os.getenv("CLIENT_ID"),
     client_secret=os.getenv("CLIENT_SECRET"),
-    user_agent=os.getenv("USER_AGENT", "webscraper")
+    user_agent=os.getenv("USER_AGENT", "webscraper"),
+    username=os.getenv("REDDIT_USERNAME"),
+    password=os.getenv("REDDIT_PASSWORD")
 )
+
+
 
 # Google Drive setup with service account
 SERVICE_ACCOUNT_FILE = os.path.join(os.path.dirname(__file__), "service_account.json")
