@@ -169,9 +169,9 @@ def download_reddit_video(post, filepath):
             if audio_downloaded:
                 # Use subprocess instead of os.system for better error handling
                 try:
-                    # Try with an absolute path to ffmpeg first
-                    ffmpeg_cmd = ["ffmpeg", "-i", video_downloaded, "-i", audio_downloaded, 
-                                 "-c:v", "copy", "-c:a", "aac", final_path, "-y"]
+                    # Convert PosixPath objects to strings
+                    ffmpeg_cmd = ["ffmpeg", "-i", str(video_downloaded), "-i", str(audio_downloaded), 
+                                 "-c:v", "copy", "-c:a", "aac", str(final_path), "-y"]
                     
                     logging.info(f"Running FFmpeg command: {' '.join(ffmpeg_cmd)}")
                     result = subprocess.run(ffmpeg_cmd, 
@@ -183,8 +183,8 @@ def download_reddit_video(post, filepath):
                     if result.returncode != 0:
                         logging.error(f"FFmpeg error: {result.stderr}")
                         # Try a simpler ffmpeg command as fallback
-                        ffmpeg_cmd = ["ffmpeg", "-i", video_downloaded, "-i", audio_downloaded, 
-                                     "-c", "copy", final_path, "-y"]
+                        ffmpeg_cmd = ["ffmpeg", "-i", str(video_downloaded), "-i", str(audio_downloaded), 
+                                     "-c", "copy", str(final_path), "-y"]
                         logging.info(f"Trying simpler FFmpeg command: {' '.join(ffmpeg_cmd)}")
                         result = subprocess.run(ffmpeg_cmd, 
                                                stdout=subprocess.PIPE, 
