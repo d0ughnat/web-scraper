@@ -24,7 +24,7 @@ app = FastAPI()
 # Enable CORS to allow React frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # React dev server (Vite default)
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -61,9 +61,9 @@ def download_media(url, filename, post=None):
         
         if any(platform in url.lower() for platform in video_platforms):
             ydl_opts = {
-                'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',  # Prioritize mp4 with audio
+                'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
                 'outtmpl': str(filepath),
-                'merge_output_format': 'mp4',          # Merge into mp4
+                'merge_output_format': 'mp4',
                 'postprocessors': [{
                     'key': 'FFmpegVideoConvertor',
                     'preferedformat': 'mp4',
@@ -72,10 +72,13 @@ def download_media(url, filename, post=None):
                 }, {
                     'key': 'FFmpegMetadata',
                 }],
-                'prefer_ffmpeg': True,                # Ensure ffmpeg is used for merging
-                'keepvideo': False,                   # Don't keep the video file after merging
+                'prefer_ffmpeg': True,
+                'keepvideo': False,
                 'quiet': True,
                 'no_warnings': True,
+                # Add Reddit authentication
+                'username': os.getenv("REDDIT_USERNAME"),
+                'password': os.getenv("REDDIT_PASSWORD"),
             }
             
             with YoutubeDL(ydl_opts) as ydl:
@@ -236,7 +239,7 @@ async def scrape_subreddit(
             if scrape_videos and post.is_video:
                 video_url = f"https://reddit.com{post.permalink}"
                 filename = f"video_{post.id}.mp4"
-                downloaded = download_media(video_url, filename, post=post)  # Pass post object
+                downloaded = download_media(video_url, filename, post=post)
                 if downloaded:
                     drive_link = upload_to_drive(downloaded, folder_id) if save_to_drive else None
                     local_path = save_to_local_folder(downloaded, local_folder) if save_locally else None
