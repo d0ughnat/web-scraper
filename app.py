@@ -15,6 +15,11 @@ from googleapiclient.http import MediaFileUpload
 import re
 import random
 import shutil
+import time
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
 
 # Load environment variables from .env file
 load_dotenv()
@@ -34,12 +39,8 @@ app.add_middleware(
 reddit = praw.Reddit(
     client_id=os.getenv("CLIENT_ID"),
     client_secret=os.getenv("CLIENT_SECRET"),
-    user_agent=os.getenv("USER_AGENT", "webscraper"),
-    username=os.getenv("REDDIT_USERNAME"),
-    password=os.getenv("REDDIT_PASSWORD")
+    user_agent=os.getenv("USER_AGENT", "webscraper")
 )
-
-
 
 # Google Drive setup with service account
 SERVICE_ACCOUNT_FILE = os.path.join(os.path.dirname(__file__), "service_account.json")
@@ -54,10 +55,10 @@ DOWNLOAD_DIR.mkdir(exist_ok=True)
 # Helper functions
 def download_media(url, filename, post=None):
     """Download media file with support for YouTube, Reddit videos, and other platforms"""
+    logging.info(f"Attempting to download: {url}")
     try:
         filepath = DOWNLOAD_DIR / filename
         
-        # Check if it's a video URL that yt-dlp can handle
         video_platforms = [
             'youtube.com', 'youtu.be', 'reddit.com/r', 'v.redd.it',
             'vimeo.com', 'dailymotion.com', 'facebook.com'
@@ -80,44 +81,71 @@ def download_media(url, filename, post=None):
                 'keepvideo': False,
                 'quiet': True,
                 'no_warnings': True,
-                # Add Reddit authentication
                 'username': os.getenv("REDDIT_USERNAME"),
                 'password': os.getenv("REDDIT_PASSWORD"),
+                'http_headers': {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                    'Accept': '*/*',
+                },
             }
             
             with YoutubeDL(ydl_opts) as ydl:
                 try:
                     ydl.download([url])
-                    return str(filepath) if filepath.exists() else None
+                    if filepath.exists():
+                        logging.info(f"yt-dlp succeeded for {url}")
+                        return str(filepath)
                 except Exception as e:
-                    print(f"yt-dlp download failed: {str(e)}")
-                    # Enhanced fallback with PRAW for Reddit videos
-                    if post and post.is_video and 'reddit_video' in post.media:
-                        video_url = post.media['reddit_video']['fallback_url']
-                        return download_with_requests(video_url, filepath)
-                    return download_with_requests(url, filepath)
+                    logging.error(f"yt-dlp failed for {url}: {str(e)}")
+            
+            # Enhanced fallback for Reddit videos with audio
+            if post and post.is_video and 'reddit_video' in post.media:
+                video_url = post.media['reddit_video']['fallback_url']
+                audio_url = video_url.rsplit('/', 1)[0] + '/DASH_audio.mp4'  # Derive audio URL
+                video_path = filepath.with_suffix('.video.mp4')
+                audio_path = filepath.with_suffix('.audio.mp4')
+                
+                video_downloaded = download_with_requests(video_url, video_path)
+                audio_downloaded = download_with_requests(audio_url, audio_path)
+                
+                if video_downloaded and audio_downloaded:
+                    final_path = filepath.with_suffix('.mp4')
+                    cmd = f'ffmpeg -i "{video_downloaded}" -i "{audio_downloaded}" -c:v copy -c:a aac "{final_path}" -y'
+                    os.system(cmd)
+                    if final_path.exists():
+                        os.remove(video_downloaded)
+                        os.remove(audio_downloaded)
+                        logging.info(f"Successfully merged video and audio for {url}")
+                        return str(final_path)
+                elif video_downloaded:
+                    logging.warning(f"Audio download failed for {url}, returning video only")
+                    return video_downloaded
+            return download_with_requests(url, filepath)
         else:
-            # Use regular request download for other media types
             return download_with_requests(url, filepath)
             
     except Exception as e:
-        print(f"Download error: {str(e)}")
+        logging.error(f"Download error for {url}: {str(e)}")
     return None
 
 def download_with_requests(url, filepath):
     """Fallback function to download media using requests"""
     try:
-        response = requests.get(url, stream=True, timeout=10)
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept': '*/*',
+        }
+        response = requests.get(url, stream=True, headers=headers, timeout=10)
         if response.status_code == 200:
             with open(filepath, "wb") as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
             return str(filepath) if Path(filepath).exists() else None
         else:
-            print(f"Failed to download {url}: Status code {response.status_code}")
+            logging.error(f"Failed to download {url}: Status code {response.status_code}")
             return None
     except Exception as e:
-        print(f"Requests download error: {str(e)}")
+        logging.error(f"Requests download error for {url}: {str(e)}")
         return None
 
 def extract_folder_id(drive_link):
@@ -153,7 +181,7 @@ def upload_to_drive(file_path, folder_id=None):
 
         return f"https://drive.google.com/file/d/{file.get('id')}/view"
     except Exception as e:
-        print(f"Upload error: {str(e)}")
+        logging.error(f"Upload error: {str(e)}")
         return None
     
 def contains_keywords(text, keywords):
@@ -188,7 +216,7 @@ def save_to_local_folder(downloaded_file, local_folder):
         shutil.copy2(downloaded_file, dest_path)
         return str(dest_path)
     except Exception as e:
-        print(f"Local save error: {str(e)}")
+        logging.error(f"Local save error: {str(e)}")
         return None
 
 # FastAPI routes
@@ -257,6 +285,7 @@ async def scrape_subreddit(
                         "drive_link": drive_link,
                         "local_path": local_path
                     })
+                    time.sleep(1)  # Rate limiting
             
             elif scrape_images and (
                 "i.redd.it" in post.url or 
@@ -278,11 +307,13 @@ async def scrape_subreddit(
                         "drive_link": drive_link,
                         "local_path": local_path
                     })
+                    time.sleep(1)  # Rate limiting
             
             if download_limit is not None and len(media_files) >= download_limit:
                 break
     
     except Exception as e:
+        logging.error(f"Scrape error: {str(e)}")
         return {"error": str(e)}
 
     return {
@@ -328,6 +359,7 @@ async def list_local_downloads(folder_path: str):
         
         return {"folder": folder_path, "files": files}
     except Exception as e:
+        logging.error(f"List local downloads error: {str(e)}")
         return {"error": str(e)}
 
 if __name__ == "__main__":
