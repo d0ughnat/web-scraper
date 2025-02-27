@@ -65,7 +65,12 @@ def download_media(url, filename, post=None):
         ]
         
         if any(platform in url.lower() for platform in video_platforms):
-            # Enhanced yt-dlp configuration
+            # Enhanced yt-dlp configuration with cookies
+            cookies_file = os.getenv("REDDIT_COOKIES_FILE")
+            if cookies_file and not os.path.exists(cookies_file):
+                logging.warning(f"Cookies file {cookies_file} not found. Proceeding without cookies.")
+                cookies_file = None
+
             ydl_opts = {
                 'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
                 'outtmpl': str(filepath),
@@ -92,7 +97,7 @@ def download_media(url, filename, post=None):
                 },
                 'retries': 5,  # Retry on failure
                 'sleep_interval': 2,  # Wait 2 seconds between retries
-                'cookies': os.getenv("REDDIT_COOKIES_FILE"),  # Optional: Path to cookies file
+                'cookiefile': cookies_file,  # Use cookies file if available
             }
             
             with YoutubeDL(ydl_opts) as ydl:
