@@ -65,6 +65,7 @@ def download_media(url, filename, post=None):
         ]
         
         if any(platform in url.lower() for platform in video_platforms):
+            # Enhanced yt-dlp configuration
             ydl_opts = {
                 'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
                 'outtmpl': str(filepath),
@@ -86,7 +87,12 @@ def download_media(url, filename, post=None):
                 'http_headers': {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
                     'Accept': '*/*',
+                    'Referer': 'https://www.reddit.com/',
+                    'Origin': 'https://www.reddit.com',
                 },
+                'retries': 5,  # Retry on failure
+                'sleep_interval': 2,  # Wait 2 seconds between retries
+                'cookies': os.getenv("REDDIT_COOKIES_FILE"),  # Optional: Path to cookies file
             }
             
             with YoutubeDL(ydl_opts) as ydl:
@@ -101,22 +107,37 @@ def download_media(url, filename, post=None):
             # Enhanced fallback for Reddit videos with audio
             if post and post.is_video and 'reddit_video' in post.media:
                 video_url = post.media['reddit_video']['fallback_url']
-                audio_url = video_url.rsplit('/', 1)[0] + '/DASH_audio.mp4'  # Derive audio URL
+                # Try multiple audio URL patterns
+                audio_urls = [
+                    video_url.rsplit('/', 1)[0] + '/DASH_audio.mp4',
+                    video_url.replace('DASH_', 'DASH_audio_'),
+                    video_url.rsplit('/', 1)[0] + '/audio'
+                ]
                 video_path = filepath.with_suffix('.video.mp4')
                 audio_path = filepath.with_suffix('.audio.mp4')
                 
                 video_downloaded = download_with_requests(video_url, video_path)
-                audio_downloaded = download_with_requests(audio_url, audio_path)
+                audio_downloaded = None
+                
+                # Try each audio URL until one works
+                for audio_url in audio_urls:
+                    audio_downloaded = download_with_requests(audio_url, audio_path)
+                    if audio_downloaded:
+                        break
+                    else:
+                        logging.warning(f"Failed to download audio from {audio_url}")
                 
                 if video_downloaded and audio_downloaded:
                     final_path = filepath.with_suffix('.mp4')
                     cmd = f'ffmpeg -i "{video_downloaded}" -i "{audio_downloaded}" -c:v copy -c:a aac "{final_path}" -y'
-                    os.system(cmd)
-                    if final_path.exists():
+                    result = os.system(cmd)
+                    if result == 0 and final_path.exists():  # Check FFmpeg success
                         os.remove(video_downloaded)
                         os.remove(audio_downloaded)
                         logging.info(f"Successfully merged video and audio for {url}")
                         return str(final_path)
+                    else:
+                        logging.error(f"FFmpeg merge failed for {url}")
                 elif video_downloaded:
                     logging.warning(f"Audio download failed for {url}, returning video only")
                     return video_downloaded
@@ -134,13 +155,20 @@ def download_with_requests(url, filepath):
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
             'Accept': '*/*',
+            'Referer': 'https://www.reddit.com/',
+            'Origin': 'https://www.reddit.com',
         }
-        response = requests.get(url, stream=True, headers=headers, timeout=10)
+        response = requests.get(url, stream=True, headers=headers, timeout=15)
         if response.status_code == 200:
             with open(filepath, "wb") as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
-            return str(filepath) if Path(filepath).exists() else None
+            if Path(filepath).exists():
+                logging.info(f"Downloaded {url} successfully with requests")
+                return str(filepath)
+            else:
+                logging.error(f"File not created for {url}")
+                return None
         else:
             logging.error(f"Failed to download {url}: Status code {response.status_code}")
             return None
@@ -285,8 +313,8 @@ async def scrape_subreddit(
                         "drive_link": drive_link,
                         "local_path": local_path
                     })
-                    time.sleep(1)  # Rate limiting
-            
+                    time.sleep(2)  # Increased rate limiting to avoid 403
+                    
             elif scrape_images and (
                 "i.redd.it" in post.url or 
                 post.url.endswith((".jpg", ".jpeg", ".png", ".gif"))
@@ -307,7 +335,7 @@ async def scrape_subreddit(
                         "drive_link": drive_link,
                         "local_path": local_path
                     })
-                    time.sleep(1)  # Rate limiting
+                    time.sleep(2)  # Increased rate limiting to avoid 403
             
             if download_limit is not None and len(media_files) >= download_limit:
                 break
