@@ -17,6 +17,7 @@ import random
 import shutil
 import time
 import logging
+import subprocess
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -85,8 +86,8 @@ def download_media(url, filename, post=None):
                 }],
                 'prefer_ffmpeg': True,
                 'keepvideo': False,
-                'quiet': True,
-                'no_warnings': True,
+                'quiet': False,  # Changed to False to see more logs
+                'no_warnings': False,  # Changed to False to see warnings
                 'username': os.getenv("REDDIT_USERNAME"),
                 'password': os.getenv("REDDIT_PASSWORD"),
                 'http_headers': {
@@ -111,41 +112,7 @@ def download_media(url, filename, post=None):
             
             # Enhanced fallback for Reddit videos with audio
             if post and post.is_video and 'reddit_video' in post.media:
-                video_url = post.media['reddit_video']['fallback_url']
-                # Try multiple audio URL patterns
-                audio_urls = [
-                    video_url.rsplit('/', 1)[0] + '/DASH_audio.mp4',
-                    video_url.replace('DASH_', 'DASH_audio_'),
-                    video_url.rsplit('/', 1)[0] + '/audio'
-                ]
-                video_path = filepath.with_suffix('.video.mp4')
-                audio_path = filepath.with_suffix('.audio.mp4')
-                
-                video_downloaded = download_with_requests(video_url, video_path)
-                audio_downloaded = None
-                
-                # Try each audio URL until one works
-                for audio_url in audio_urls:
-                    audio_downloaded = download_with_requests(audio_url, audio_path)
-                    if audio_downloaded:
-                        break
-                    else:
-                        logging.warning(f"Failed to download audio from {audio_url}")
-                
-                if video_downloaded and audio_downloaded:
-                    final_path = filepath.with_suffix('.mp4')
-                    cmd = f'ffmpeg -i "{video_downloaded}" -i "{audio_downloaded}" -c:v copy -c:a aac "{final_path}" -y'
-                    result = os.system(cmd)
-                    if result == 0 and final_path.exists():  # Check FFmpeg success
-                        os.remove(video_downloaded)
-                        os.remove(audio_downloaded)
-                        logging.info(f"Successfully merged video and audio for {url}")
-                        return str(final_path)
-                    else:
-                        logging.error(f"FFmpeg merge failed for {url}")
-                elif video_downloaded:
-                    logging.warning(f"Audio download failed for {url}, returning video only")
-                    return video_downloaded
+                return download_reddit_video(post, filepath)
             return download_with_requests(url, filepath)
         else:
             return download_with_requests(url, filepath)
@@ -153,6 +120,109 @@ def download_media(url, filename, post=None):
     except Exception as e:
         logging.error(f"Download error for {url}: {str(e)}")
     return None
+
+def download_reddit_video(post, filepath):
+    """Improved function specifically for downloading Reddit videos with audio"""
+    try:
+        if not post.is_video or 'reddit_video' not in post.media:
+            return None
+        
+        video_url = post.media['reddit_video']['fallback_url']
+        logging.info(f"Processing Reddit video: {video_url}")
+        
+        # Extract the base URL for audio
+        base_url = video_url.rsplit('/', 1)[0]
+        
+        # Create temporary files for video and audio
+        video_path = filepath.with_suffix('.video.mp4')
+        audio_path = filepath.with_suffix('.audio.mp4')
+        final_path = filepath.with_suffix('.mp4')
+        
+        # Download video
+        video_downloaded = download_with_requests(video_url, video_path)
+        if not video_downloaded:
+            logging.error(f"Failed to download video from {video_url}")
+            return None
+        
+        # Possible audio URLs
+        audio_urls = [
+            f"{base_url}/DASH_audio.mp4",
+            f"{base_url}/audio",
+            f"{base_url}/DASH_AUDIO_64.mp4",
+            f"{base_url}/DASH_AUDIO_128.mp4",
+            video_url.replace('DASH_', 'DASH_audio_')
+        ]
+        
+        # Try each audio URL until one works
+        audio_downloaded = None
+        for audio_url in audio_urls:
+            logging.info(f"Trying audio URL: {audio_url}")
+            audio_downloaded = download_with_requests(audio_url, audio_path)
+            if audio_downloaded:
+                logging.info(f"Successfully downloaded audio from {audio_url}")
+                break
+            else:
+                logging.warning(f"Failed to download audio from {audio_url}")
+        
+        # If video was downloaded
+        if video_downloaded:
+            if audio_downloaded:
+                # Use subprocess instead of os.system for better error handling
+                try:
+                    # Try with an absolute path to ffmpeg first
+                    ffmpeg_cmd = ["ffmpeg", "-i", video_downloaded, "-i", audio_downloaded, 
+                                 "-c:v", "copy", "-c:a", "aac", final_path, "-y"]
+                    
+                    logging.info(f"Running FFmpeg command: {' '.join(ffmpeg_cmd)}")
+                    result = subprocess.run(ffmpeg_cmd, 
+                                           stdout=subprocess.PIPE, 
+                                           stderr=subprocess.PIPE, 
+                                           text=True, 
+                                           check=False)
+                    
+                    if result.returncode != 0:
+                        logging.error(f"FFmpeg error: {result.stderr}")
+                        # Try a simpler ffmpeg command as fallback
+                        ffmpeg_cmd = ["ffmpeg", "-i", video_downloaded, "-i", audio_downloaded, 
+                                     "-c", "copy", final_path, "-y"]
+                        logging.info(f"Trying simpler FFmpeg command: {' '.join(ffmpeg_cmd)}")
+                        result = subprocess.run(ffmpeg_cmd, 
+                                               stdout=subprocess.PIPE, 
+                                               stderr=subprocess.PIPE, 
+                                               text=True, 
+                                               check=False)
+                    
+                    if result.returncode == 0 and final_path.exists():
+                        # Clean up temp files only if successful
+                        try:
+                            if os.path.exists(video_downloaded):
+                                os.remove(video_downloaded)
+                            if os.path.exists(audio_downloaded):
+                                os.remove(audio_downloaded)
+                        except Exception as e:
+                            logging.warning(f"Error cleaning up temp files: {str(e)}")
+                            
+                        logging.info(f"Successfully merged video and audio for Reddit video")
+                        return str(final_path)
+                    else:
+                        logging.error(f"FFmpeg merge failed: {result.stderr}")
+                except Exception as e:
+                    logging.error(f"Error during FFmpeg execution: {str(e)}")
+                
+                # If we're here, ffmpeg failed - manually copy video file as last resort
+                shutil.copy2(video_downloaded, final_path)
+                logging.warning(f"Audio merge failed, returning video only")
+                return str(final_path)
+            else:
+                # No audio found, just return the video
+                logging.warning(f"No audio found for Reddit video, returning video only")
+                video_final_path = filepath.with_suffix('.mp4')
+                shutil.copy2(video_downloaded, video_final_path)
+                return str(video_final_path)
+        return None
+    except Exception as e:
+        logging.error(f"Error in download_reddit_video: {str(e)}")
+        return None
 
 def download_with_requests(url, filepath):
     """Fallback function to download media using requests"""
@@ -168,11 +238,11 @@ def download_with_requests(url, filepath):
             with open(filepath, "wb") as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
-            if Path(filepath).exists():
-                logging.info(f"Downloaded {url} successfully with requests")
+            if Path(filepath).exists() and os.path.getsize(filepath) > 0:
+                logging.info(f"Downloaded {url} successfully with requests, size: {os.path.getsize(filepath)} bytes")
                 return str(filepath)
             else:
-                logging.error(f"File not created for {url}")
+                logging.error(f"File not created or empty for {url}")
                 return None
         else:
             logging.error(f"Failed to download {url}: Status code {response.status_code}")
