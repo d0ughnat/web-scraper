@@ -301,7 +301,7 @@ const WebScraping = () => {
                   Score: {item.score} | Posted: {item.created}
                 </div>
                 <div className="media-links">
-                  <a href={`https://web-scraper-fxf1.onrender.com/download/${item.filename}`} download>
+                  <a href={`https://webscraper-i3yv.onrender.com/download/${item.filename}`} download>
                     Download {item.type}
                   </a>
                   <a href={item.url} target="_blank" rel="noopener noreferrer">
