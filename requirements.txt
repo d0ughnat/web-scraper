@@ -10,3 +10,4 @@ pydrive2
 requests
 opencv-python
 numpy
+ffmpeg-python

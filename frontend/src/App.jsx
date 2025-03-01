@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import WebScraping from './tools/WebScraping';
 import GoogleDriveVideoPlayer from './tools/GoogleVideoPlayer';
+import OverLay from './tools/OverLay';  // Import the OverLay component
 import './App.css';
 
 function App() {
@@ -20,7 +21,7 @@ function App() {
   return (
     <>
       <header className="app-header">
-        <h1>Website Scraper</h1>
+        <h1>Website Scraper & Video Tools</h1>
       </header>
       <div className="app">
         <main className="app-content">
@@ -39,6 +40,12 @@ function App() {
               >
                 Reaction Video
               </button>
+              <button
+                className={`tab-button ${activeTab === 'overlay' ? 'active' : ''}`}
+                onClick={() => handleTabChange('overlay')}
+              >
+                Video Overlay
+              </button>
             </div>
 
             {/* Tab Content */}
@@ -53,6 +60,11 @@ function App() {
                 <div className="video-section">
                   <h2>Reaction Video</h2>
                   <GoogleDriveVideoPlayer videoIds={videoIds} />
+                </div>
+              )}
+              {activeTab === 'overlay' && (
+                <div className="overlay-section">
+                  <OverLay />
                 </div>
               )}
             </section>

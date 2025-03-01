@@ -78,25 +78,7 @@ const GoogleDriveFolderVideoPlayer = () => {
 
   return (
     <div className="w-full">
-      {/* Folder ID Input */}
-      <div className="mb-4">
-        <h3 className="text-lg font-semibold mb-2">Enter Folder ID:</h3>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            placeholder="Google Drive Folder ID"
-            value={folderId}
-            onChange={(e) => setFolderId(e.target.value)}
-            className="p-2 border rounded w-full max-w-md"
-          />
-          <button
-            onClick={handleFolderSubmit}
-            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-          >
-            Load Folder
-          </button>
-        </div>
-      </div>
+     
 
       {/* Manual Video ID Input */}
       <div className="mb-4">
