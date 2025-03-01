@@ -67,7 +67,7 @@ const WebScraping = () => {
     if (formData.localFolder) data.append('local_folder', formData.localFolder);
 
     try {
-      const response = await axios.post('https://web-scraper-fxf1.onrender.com/scrape', data, {
+      const response = await axios.post('https://webscraper-i3yv.onrender.com', data, {
         headers: {
           'Client-ID': process.env.REACT_APP_CLIENT_ID,
           'Client-Secret': process.env.REACT_APP_CLIENT_SECRET,
