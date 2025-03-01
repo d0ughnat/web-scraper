@@ -4,7 +4,7 @@ import './App.css';
 
 function App() {
   // API URL - change this to your deployed API URL
-  const API_URL = "https://your-api-url.onrender.com"; // Update with your actual Render URL
+  const API_URL = "https://webscraper-i3yv.onrender.com"; // Update with your actual Render URL
 
   // State for form inputs
   const [subreddit, setSubreddit] = useState('');
