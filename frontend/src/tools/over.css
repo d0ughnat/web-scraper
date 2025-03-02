@@ -1,373 +1,43 @@
-/* App.css */
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-  background-color: #f5f7fa;
-  color: #333;
-  line-height: 1.6;
-}
-
 .App {
-  max-width: 1200px;
-  margin: 0 auto;
+  text-align: center;
   padding: 20px;
-}
-
-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 30px;
-  padding-bottom: 15px;
-  border-bottom: 1px solid #e1e4e8;
+  max-width: 600px;
+  margin: 0 auto;
 }
 
 h1 {
-  font-size: 24px;
-  font-weight: 600;
-  color: #2d3748;
+  margin-bottom: 20px;
 }
 
-h2 {
-  font-size: 18px;
-  font-weight: 600;
-  color: #2d3748;
-  margin-bottom: 15px;
-}
-
-h3 {
-  font-size: 16px;
-  font-weight: 600;
-  color: #2d3748;
-  margin-bottom: 10px;
-}
-
-.container {
+form {
   display: flex;
   flex-direction: column;
-  gap: 30px;
+  gap: 15px;
 }
 
-.video-inputs {
-  display: flex;
-  gap: 20px;
-  flex-wrap: wrap;
-}
-
-.video-input-container {
-  flex: 1;
-  min-width: 300px;
-  background-color: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  padding: 20px;
-}
-
-.video-preview {
-  width: 100%;
-  height: 200px;
-  background-color: #f1f5f9;
-  border-radius: 5px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  overflow: hidden;
-  margin-bottom: 15px;
-  border: 1px dashed #ccc;
-}
-
-.video-preview video {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-
-.video-preview.result {
-  height: 300px;
-}
-
-.placeholder {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  color: #94a3b8;
-}
-
-.placeholder p {
-  margin-top: 10px;
-}
-
-.input-methods {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.file-input-wrapper {
-  position: relative;
-}
-
-.file-input-wrapper label {
-  display: block;
-  width: 100%;
-  padding: 8px 12px;
-  background-color: #3b82f6;
-  color: white;
-  border-radius: 5px;
-  text-align: center;
-  cursor: pointer;
-  font-weight: 500;
-  transition: background-color 0.2s;
-}
-
-.file-input-wrapper label:hover {
-  background-color: #2563eb;
-}
-
-input[type="file"] {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  opacity: 0;
-}
-
-.url-input input {
-  width: 100%;
-  padding: 8px 12px;
-  border: 1px solid #e2e8f0;
-  border-radius: 5px;
-  transition: border-color 0.2s;
-}
-
-.url-input input:focus {
-  outline: none;
-  border-color: #3b82f6;
-}
-
-.settings-container {
-  background-color: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  padding: 20px;
-}
-
-.settings-header {
+div {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  cursor: pointer;
 }
 
-.settings-header svg {
-  transition: transform 0.2s;
+label {
+  font-weight: bold;
 }
 
-.settings-header svg.rotated {
-  transform: rotate(180deg);
-}
-
-.settings-content {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 15px;
-  margin-top: 20px;
-  padding-bottom: 20px;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.custom-position {
-  display: flex;
-  gap: 15px;
-  grid-column: 1 / -1;
-}
-
-.custom-position .setting-group {
-  flex: 1;
-}
-
-.setting-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.setting-group label {
-  font-size: 14px;
-  font-weight: 500;
-  color: #4b5563;
-}
-
-.setting-group input[type="range"] {
-  width: 100%;
-  appearance: none;
-  height: 6px;
-  background: #e2e8f0;
-  border-radius: 3px;
-  outline: none;
-}
-
-.setting-group input[type="range"]::-webkit-slider-thumb {
-  appearance: none;
-  width: 18px;
-  height: 18px;
-  background: #3b82f6;
-  border-radius: 50%;
-  cursor: pointer;
-}
-
-.setting-group input[type="number"],
-.setting-group select {
-  padding: 8px 12px;
-  border: 1px solid #e2e8f0;
-  border-radius: 5px;
-  transition: border-color 0.2s;
-}
-
-.setting-group input[type="number"]:focus,
-.setting-group select:focus {
-  outline: none;
-  border-color: #3b82f6;
-}
-
-.setting-group.checkbox {
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.setting-group.checkbox input {
-  width: 18px;
-  height: 18px;
-}
-
-.drive-upload-section {
-  margin-top: 20px;
-  padding-bottom: 20px;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.drive-settings {
-  margin-top: 15px;
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-}
-
-.action-buttons {
-  margin-top: 20px;
-  display: flex;
-  justify-content: center;
+input, select, button {
+  padding: 5px;
 }
 
 button {
-  background: none;
+  background-color: #4CAF50;
+  color: white;
   border: none;
+  padding: 10px;
   cursor: pointer;
-  font-family: inherit;
 }
 
-.settings-button {
-  background-color: #f1f5f9;
-  color: #475569;
-  padding: 8px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background-color 0.2s;
-}
-
-.settings-button:hover {
-  background-color: #e2e8f0;
-}
-
-.process-button {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background-color: #3b82f6;
-  color: white;
-  padding: 12px 24px;
-  border-radius: 5px;
-  font-weight: 500;
-  transition: background-color 0.2s;
-}
-
-.process-button:disabled {
-  background-color: #94a3b8;
+button:disabled {
+  background-color: #cccccc;
   cursor: not-allowed;
-}
-
-.process-button:not(:disabled):hover {
-  background-color: #2563eb;
-}
-
-.spinner {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-.result-container {
-  background-color: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  padding: 20px;
-}
-
-.result-actions {
-  display: flex;
-  gap: 15px;
-  margin-top: 15px;
-}
-
-.download-button, .drive-button {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
-  border-radius: 5px;
-  font-weight: 500;
-  transition: background-color 0.2s;
-  text-decoration: none;
-}
-
-.download-button {
-  background-color: #10b981;
-  color: white;
-}
-
-.download-button:hover {
-  background-color: #059669;
-}
-
-.drive-button {
-  background-color: #f97316;
-  color: white;
-}
-
-.drive-button:hover {
-  background-color: #ea580c;
-}
-
-.drive-result {
-  margin-top: 20px;
-  padding: 15px;
-  background-color: #f8fafc;
-  border-radius: 5px;
-}
-
-.drive-links {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
 }
