@@ -1,36 +1,38 @@
 import React, { useState } from 'react';
-import axios from 'axios';
 import './web.css';
 
-const WebScraping = () => {
+function WebScraper() {
   const [formData, setFormData] = useState({
     subreddit: '',
-    mediaTypes: { images: true, videos: true },
+    media_types: [],
     keywords: '',
-    sortBy: 'hot',
+    sort_by: 'hot',
     limit: 25,
-    dateAfter: '',
-    minUpvotes: 0,
-    downloadLimit: '',
-    saveToDrive: false,
-    driveFolderUrl: '',
-    saveLocally: false,
-    localFolder: '',
+    date_after: '',
+    min_upvotes: 0,
+    download_limit: '',
+    save_to_drive: false,
+    drive_folder_url: '',
+    save_locally: false,
+    local_folder: ''
   });
+  
+  const [isLoading, setIsLoading] = useState(false);
   const [results, setResults] = useState(null);
   const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [localFiles, setLocalFiles] = useState(null);
 
-  const handleChange = (e) => {
+  const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
-    if (type === 'checkbox' && name in formData.mediaTypes) {
-      setFormData({
-        ...formData,
-        mediaTypes: { ...formData.mediaTypes, [name]: checked },
-      });
-    } else if (type === 'checkbox') {
-      setFormData({ ...formData, [name]: checked });
+    if (type === 'checkbox') {
+      if (name === 'save_to_drive' || name === 'save_locally') {
+        setFormData({ ...formData, [name]: checked });
+      } else if (name === 'media_types') {
+        // Handle media type checkboxes
+        const updatedMediaTypes = checked 
+          ? [...formData.media_types, value]
+          : formData.media_types.filter(type => type !== value);
+        setFormData({ ...formData, media_types: updatedMediaTypes });
+      }
     } else {
       setFormData({ ...formData, [name]: value });
     }
@@ -38,311 +40,311 @@ const WebScraping = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
+    setIsLoading(true);
     setError(null);
     setResults(null);
-    setLocalFiles(null);
-
-    const mediaTypes = Object.keys(formData.mediaTypes).filter(
-      (key) => formData.mediaTypes[key]
-    );
-    if (mediaTypes.length === 0) {
-      setError('Please select at least one media type to scrape');
-      setLoading(false);
-      return;
-    }
-
-    const data = new FormData();
-    data.append('subreddit', formData.subreddit);
-    mediaTypes.forEach((type) => data.append('media_types', type));
-    data.append('keywords', formData.keywords);
-    data.append('sort_by', formData.sortBy);
-    data.append('limit', formData.limit);
-    if (formData.dateAfter) data.append('date_after', formData.dateAfter);
-    data.append('min_upvotes', formData.minUpvotes);
-    if (formData.downloadLimit) data.append('download_limit', formData.downloadLimit);
-    data.append('save_to_drive', formData.saveToDrive);
-    if (formData.driveFolderUrl) data.append('drive_folder_url', formData.driveFolderUrl);
-    data.append('save_locally', formData.saveLocally);
-    if (formData.localFolder) data.append('local_folder', formData.localFolder);
-
+    
     try {
-      const response = await axios.post('https://webscraper-i3yv.onrender.com/scrape', data, {
-        headers: {
-          'Client-ID': process.env.REACT_APP_CLIENT_ID,
-          'Client-Secret': process.env.REACT_APP_CLIENT_SECRET,
-          'User-Agent': process.env.REACT_APP_USER_AGENT,
-        },
+      // Create FormData object for API call
+      const apiFormData = new FormData();
+      apiFormData.append('subreddit', formData.subreddit);
+      
+      // Handle media_types as array
+      formData.media_types.forEach(type => {
+        apiFormData.append('media_types', type);
       });
-      setResults(response.data);
-
-      // If local saving was enabled, fetch the list of local files
-      if (formData.saveLocally && formData.localFolder) {
+      
+      apiFormData.append('keywords', formData.keywords);
+      apiFormData.append('sort_by', formData.sort_by);
+      apiFormData.append('limit', formData.limit.toString());
+      
+      if (formData.date_after) {
+        apiFormData.append('date_after', formData.date_after);
+      }
+      
+      apiFormData.append('min_upvotes', formData.min_upvotes.toString());
+      
+      if (formData.download_limit) {
+        apiFormData.append('download_limit', formData.download_limit.toString());
+      }
+      
+      apiFormData.append('save_to_drive', formData.save_to_drive.toString());
+      
+      if (formData.save_to_drive && formData.drive_folder_url) {
+        apiFormData.append('drive_folder_url', formData.drive_folder_url);
+      }
+      
+      apiFormData.append('save_locally', formData.save_locally.toString());
+      
+      if (formData.save_locally && formData.local_folder) {
+        apiFormData.append('local_folder', formData.local_folder);
+      }
+      
+      // Log the FormData for debugging
+      for (let pair of apiFormData.entries()) {
+        console.log(pair[0] + ': ' + pair[1]);
+      }
+      
+      const response = await fetch('http://localhost:8000/scrape', {
+        method: 'POST',
+        body: apiFormData,
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
         try {
-          const localFilesResponse = await axios.get(
-            `https://web-scraper-fxf1.onrender.com/local-downloads?folder_path=${encodeURIComponent(formData.localFolder)}`,
-            {
-              headers: {
-                'Client-ID': process.env.REACT_APP_CLIENT_ID,
-                'User-Agent': process.env.REACT_APP_USER_AGENT,
-              },
-            }
-          );
-          setLocalFiles(localFilesResponse.data);
-        } catch (localErr) {
-          console.error("Error fetching local files:", localErr);
+          // Try to parse as JSON
+          const errorData = JSON.parse(errorText);
+          throw new Error(errorData.detail || 'Failed to scrape data');
+        } catch (jsonError) {
+          // If not JSON, use the raw text
+          throw new Error(errorText || 'Failed to scrape data');
         }
       }
+      
+      const data = await response.json();
+      setResults(data);
     } catch (err) {
-      setError(err.response?.data?.error || 'An error occurred');
+      console.error("Error details:", err);
+      setError(err.message);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
   return (
-    <div className="container">
-      <h1>Reddit Media Scraper</h1>
-      <form onSubmit={handleSubmit} className="form">
-        <div className="form-group">
-          <label>Subreddit name:</label>
-          <input
-            type="text"
-            name="subreddit"
-            value={formData.subreddit}
-            onChange={handleChange}
-            placeholder="Enter subreddit"
-            required
-          />
-        </div>
-
-        <div className="form-group">
-          <label>Media types to scrape:</label>
-          <div className="checkbox-group">
-            <label>
-              <input
-                type="checkbox"
-                name="images"
-                checked={formData.mediaTypes.images}
-                onChange={handleChange}
-              /> Images
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                name="videos"
-                checked={formData.mediaTypes.videos}
-                onChange={handleChange}
-              /> Videos
-            </label>
-          </div>
-        </div>
-
-        <div className="form-group">
-          <label>Keywords (optional):</label>
-          <textarea
-            name="keywords"
-            value={formData.keywords}
-            onChange={handleChange}
-            placeholder="Enter keywords separated by commas"
-          />
-          <div className="hint">Posts will be filtered to include only those with these keywords.</div>
-        </div>
-
-        <div className="form-group">
-          <label>Sort by:</label>
-          <select name="sortBy" value={formData.sortBy} onChange={handleChange}>
-            <option value="hot">Hot</option>
-            <option value="new">New</option>
-            <option value="top">Top</option>
-            <option value="rising">Rising</option>
-          </select>
-        </div>
-
-        <div className="form-group">
-          <label>Number of posts to check:</label>
-          <input
-            type="number"
-            name="limit"
-            value={formData.limit}
-            onChange={handleChange}
-            min="1"
-            max="100"
-          />
-        </div>
-
-        <div className="form-group">
-          <label>Posts after date (optional):</label>
-          <input
-            type="date"
-            name="dateAfter"
-            value={formData.dateAfter}
-            onChange={handleChange}
-          />
-          <div className="hint">Only include posts created after this date.</div>
-        </div>
-
-        <div className="form-group">
-          <label>Minimum upvotes (optional):</label>
-          <input
-            type="number"
-            name="minUpvotes"
-            value={formData.minUpvotes}
-            onChange={handleChange}
-            min="0"
-          />
-          <div className="hint">Only include posts with at least this many upvotes.</div>
-        </div>
-
-        <div className="form-group">
-          <label>Number of files to download (optional):</label>
-          <input
-            type="number"
-            name="downloadLimit"
-            value={formData.downloadLimit}
-            onChange={handleChange}
-            min="1"
-          />
-          <div className="hint">Limit the number of media files to download.</div>
-        </div>
-
-        <div className="form-group">
-          <label>
+    <div className="app-container">
+      <header>
+        <h1>Reddit Media Scraper</h1>
+      </header>
+      
+      <main>
+        <form onSubmit={handleSubmit} className="scraper-form">
+          <div className="form-group">
+            <label htmlFor="subreddit">Subreddit:</label>
             <input
-              type="checkbox"
-              name="saveToDrive"
-              checked={formData.saveToDrive}
-              onChange={handleChange}
-            /> Save to Google Drive
-          </label>
-          <div className="hint">If checked, files will be uploaded to your Google Drive.</div>
-        </div>
-
-        <div className="form-group">
-          <label>Google Drive Folder URL (optional):</label>
-          <input
-            type="text"
-            name="driveFolderUrl"
-            value={formData.driveFolderUrl}
-            onChange={handleChange}
-            placeholder="e.g., https://drive.google.com/drive/folders/abc123"
-            disabled={!formData.saveToDrive}
-          />
-          <div className="hint">Paste a Google Drive folder URL to save files there.</div>
-        </div>
-
-        {/* New local download options */}
-        <div className="section-divider"></div>
-        <h3>Local Download Options</h3>
-
-        <div className="form-group">
-          <label>
-            <input
-              type="checkbox"
-              name="saveLocally"
-              checked={formData.saveLocally}
-              onChange={handleChange}
-            /> Save files to local folder
-          </label>
-          <div className="hint">If checked, files will be saved to the specified folder on your machine.</div>
-        </div>
-
-        <div className="form-group">
-          <label>Local folder path:</label>
-          <input
-            type="text"
-            name="localFolder"
-            value={formData.localFolder}
-            onChange={handleChange}
-            placeholder="e.g., C:/Users/YourName/Downloads/RedditMedia"
-            disabled={!formData.saveLocally}
-          />
-          <div className="hint">Provide the full path to the folder where you want to save the files.</div>
-        </div>
-
-        <button type="submit" disabled={loading}>
-          {loading ? 'Scraping...' : 'Scrape Media'}
-        </button>
-      </form>
-
-      {error && <div className="error">{error}</div>}
-
-      {results && (
-        <div className="results">
-          <h2>Scraped Media from r/{results.subreddit}</h2>
-          <div className="summary">
-            <p><strong>Search Summary:</strong></p>
-            <ul>
-              <li>Subreddit: r/{results.subreddit}</li>
-              <li>Sort: {results.sort_by}</li>
-              <li>Media types: {results.media_types.join(', ')}</li>
-              <li>Keywords: {results.keywords || 'None'}</li>
-              <li>Date filter: {results.date_after || 'None'}</li>
-              <li>Minimum upvotes: {results.min_upvotes}</li>
-              <li>Download limit: {results.download_limit || 'All'}</li>
-              <li>Save to Drive: {results.save_to_drive ? 'Yes' : 'No'}</li>
-              <li>Drive Folder: {results.drive_folder_url ? <a href={results.drive_folder_url} target="_blank" rel="noopener noreferrer">Link</a> : 'None'}</li>
-              <li>Save Locally: {results.save_locally ? 'Yes' : 'No'}</li>
-              <li>Local Folder: {results.local_folder || 'None'}</li>
-              <li>Total media found: {results.media.length} (
-                {results.media.filter(m => m.type === 'image').length} images, 
-                {results.media.filter(m => m.type === 'video').length} videos)
-              </li>
-            </ul>
+              type="text"
+              id="subreddit"
+              name="subreddit"
+              value={formData.subreddit}
+              onChange={handleInputChange}
+              required
+              placeholder="e.g. pics, videos, aww"
+            />
           </div>
-
-          {results.media.length === 0 ? (
-            <p>No matching media found.</p>
-          ) : (
-            results.media.map((item, index) => (
-              <div key={index} className="media-item">
-                <h3>{item.type === 'image' ? '🖼️' : '🎬'} {item.title}</h3>
-                <div className="details">
-                  Score: {item.score} | Posted: {item.created}
-                </div>
-                <div className="media-links">
-                  <a href={`https://webscraper-i3yv.onrender.com/download/${item.filename}`} download>
-                    Download {item.type}
-                  </a>
-                  <a href={item.url} target="_blank" rel="noopener noreferrer">
-                    View original post
-                  </a>
-                  {item.drive_link && (
-                    <a href={item.drive_link} target="_blank" rel="noopener noreferrer">
-                      View on Google Drive
-                    </a>
-                  )}
-                  {item.local_path && (
-                    <span className="local-path">
-                      Saved to: {item.local_path}
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))
-          )}
-
-          {/* Display local folder contents if available */}
-          {localFiles && localFiles.files && (
-            <div className="local-files">
-              <h3>Files in local folder: {localFiles.folder}</h3>
-              <div className="files-grid">
-                {localFiles.files.map((file, index) => (
-                  <div key={index} className="local-file-item">
-                    <div>{file.name}</div>
-                    <div className="file-details">
-                      Size: {(file.size / 1024).toFixed(2)} KB | 
-                      Created: {file.created}
-                    </div>
-                  </div>
-                ))}
-              </div>
+          
+          <div className="form-group">
+            <label>Media Types (select at least one):</label>
+            <div className="checkbox-group">
+              <label>
+                <input
+                  type="checkbox"
+                  name="media_types"
+                  value="images"
+                  checked={formData.media_types.includes('images')}
+                  onChange={handleInputChange}
+                />
+                Images
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  name="media_types"
+                  value="videos"
+                  checked={formData.media_types.includes('videos')}
+                  onChange={handleInputChange}
+                />
+                Videos
+              </label>
             </div>
-          )}
-        </div>
-      )}
+            {formData.media_types.length === 0 && (
+              <p className="error-text">Please select at least one media type</p>
+            )}
+          </div>
+          
+          <div className="form-group">
+            <label htmlFor="keywords">Keywords (comma separated):</label>
+            <input
+              type="text"
+              id="keywords"
+              name="keywords"
+              value={formData.keywords}
+              onChange={handleInputChange}
+              placeholder="Optional: cat, dog, cute"
+            />
+          </div>
+          
+          <div className="form-row">
+            <div className="form-group">
+              <label htmlFor="sort_by">Sort By:</label>
+              <select
+                id="sort_by"
+                name="sort_by"
+                value={formData.sort_by}
+                onChange={handleInputChange}
+              >
+                <option value="hot">Hot</option>
+                <option value="new">New</option>
+                <option value="top">Top</option>
+                <option value="rising">Rising</option>
+              </select>
+            </div>
+            
+            <div className="form-group">
+              <label htmlFor="limit">Post Limit:</label>
+              <input
+                type="number"
+                id="limit"
+                name="limit"
+                value={formData.limit}
+                onChange={handleInputChange}
+                min="1"
+                max="100"
+              />
+            </div>
+          </div>
+          
+          <div className="form-row">
+            <div className="form-group">
+              <label htmlFor="date_after">Date After:</label>
+              <input
+                type="date"
+                id="date_after"
+                name="date_after"
+                value={formData.date_after}
+                onChange={handleInputChange}
+              />
+            </div>
+            
+            <div className="form-group">
+              <label htmlFor="min_upvotes">Min Upvotes:</label>
+              <input
+                type="number"
+                id="min_upvotes"
+                name="min_upvotes"
+                value={formData.min_upvotes}
+                onChange={handleInputChange}
+                min="0"
+              />
+            </div>
+          </div>
+          
+          <div className="form-group">
+            <label htmlFor="download_limit">Download Limit:</label>
+            <input
+              type="number"
+              id="download_limit"
+              name="download_limit"
+              value={formData.download_limit}
+              onChange={handleInputChange}
+              min="1"
+              placeholder="Optional"
+            />
+          </div>
+          
+          <div className="form-group">
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                name="save_to_drive"
+                checked={formData.save_to_drive}
+                onChange={handleInputChange}
+              />
+              Save to Google Drive
+            </label>
+            
+            {formData.save_to_drive && (
+              <input
+                type="text"
+                name="drive_folder_url"
+                value={formData.drive_folder_url}
+                onChange={handleInputChange}
+                placeholder="Google Drive folder URL"
+                className="conditional-input"
+              />
+            )}
+          </div>
+          
+          <div className="form-group">
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                name="save_locally"
+                checked={formData.save_locally}
+                onChange={handleInputChange}
+              />
+              Save Locally
+            </label>
+            
+            {formData.save_locally && (
+              <input
+                type="text"
+                name="local_folder"
+                value={formData.local_folder}
+                onChange={handleInputChange}
+                placeholder="Local folder path"
+                className="conditional-input"
+                required={formData.save_locally}
+              />
+            )}
+          </div>
+          
+          <button 
+            type="submit" 
+            className="submit-button" 
+            disabled={isLoading || formData.media_types.length === 0}
+          >
+            {isLoading ? 'Scraping...' : 'Start Scraping'}
+          </button>
+        </form>
+        
+        {error && (
+          <div className="error-message">
+            <h3>Error:</h3>
+            <p>{error}</p>
+          </div>
+        )}
+        
+        {results && (
+          <div className="results-container">
+            <h2>Scrape Results</h2>
+            {results.media && results.media.length > 0 ? (
+              <>
+                <p>Found {results.media.length} media files</p>
+                
+                <div className="media-grid">
+                  {results.media.map((item, index) => (
+                    <div key={index} className="media-card">
+                      <h3 title={item.title}>{item.title}</h3>
+                      <p>Type: {item.type}</p>
+                      <p>Filename: {item.filename}</p>
+                      <div className="media-links">
+                        <a href={item.url} target="_blank" rel="noopener noreferrer">
+                          Original Link
+                        </a>
+                        {item.drive_link && (
+                          <a href={item.drive_link} target="_blank" rel="noopener noreferrer">
+                            Drive Link
+                          </a>
+                        )}
+                        {!item.drive_link && item.filename && (
+                          <a href={`http://localhost:8000/download/${item.filename}`} target="_blank" rel="noopener noreferrer">
+                            Download
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <p>No media files found matching your criteria.</p>
+            )}
+          </div>
+        )}
+      </main>
     </div>
   );
-};
+}
 
-export default WebScraping;
+export default WebScraper;
