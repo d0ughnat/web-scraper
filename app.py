@@ -57,7 +57,7 @@ def clean_filename(filename: str) -> str:
 def extract_folder_id(folder_input: str) -> str:
     """Extract folder ID from either a full Google Drive URL or a plain ID."""
     if not folder_input:
--stopped here-        return None
+        return None
     if folder_input.startswith('http'):
         match = re.search(r'folders/([a-zA-Z0-9_-]+)', folder_input)
         if match:
@@ -162,77 +162,60 @@ async def process_video_overlay(main_video_path: str, overlay_video_path: str, o
                                speed_factor: float = 1.0, x: int = None, y: int = None,
                                opacity: float = 1.0, custom_layout: bool = False,
                                stream_to_drive: bool = False, folder_id: str = None):
-    """
-    Process video overlay with improved error handling and fixed streaming issues.
-    """
-    if not main_video_path or not os.path.exists(main_video_path):
+    if not os.path.exists(main_video_path):
         raise FileNotFoundError(f"Main video file not found: {main_video_path}")
-    if not overlay_video_path or not os.path.exists(overlay_video_path):
+    if not os.path.exists(overlay_video_path):
         raise FileNotFoundError(f"Overlay video file not found: {overlay_video_path}")
 
-    logger.info(f"Processing videos: main={main_video_path}, overlay={overlay_video_path}")
-    
-    # Ensure output_path is a string, even if None was passed in
-    if output_path is None:
-        output_path = "processed_video.mp4"
-    
-    # Create temporary files with proper cleanup
-    temp_avi = tempfile.NamedTemporaryFile(suffix='.avi', delete=False).name
-    temp_mp4 = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False).name
-    
+    main_cap = cv2.VideoCapture(main_video_path)
+    overlay_cap = cv2.VideoCapture(overlay_video_path)
+
+    if not main_cap.isOpened() or not overlay_cap.isOpened():
+        raise IOError("Failed to open video files")
+
+    main_width = int(main_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    main_height = int(main_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    original_fps = main_cap.get(cv2.CAP_PROP_FPS)
+    main_frame_count = int(main_cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    main_duration = main_frame_count / original_fps if original_fps > 0 else 0
+
+    if main_width <= 0 or main_height <= 0:
+        raise ValueError("Invalid main video dimensions")
+
+    adjusted_fps = original_fps * speed_factor
+    fourcc = cv2.VideoWriter_fourcc(*'XVID')
+
+    temp_file = tempfile.NamedTemporaryFile(suffix='.avi', delete=False)
+    temp_output = temp_file.name
+    out = cv2.VideoWriter(temp_output, fourcc, adjusted_fps, (main_width, main_height))
+
+    valid_positions = {'top_left', 'top_right', 'bottom_left', 'bottom_right', 'center', 'custom'}
+    if position not in valid_positions and not custom_layout:
+        raise ValueError(f"Invalid position. Must be one of: {', '.join(valid_positions)}")
+
     try:
-        main_cap = cv2.VideoCapture(main_video_path)
-        overlay_cap = cv2.VideoCapture(overlay_video_path)
-
-        if not main_cap.isOpened():
-            raise IOError(f"Failed to open main video file: {main_video_path}")
-        if not overlay_cap.isOpened():
-            raise IOError(f"Failed to open overlay video file: {overlay_video_path}")
-
-        main_width = int(main_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        main_height = int(main_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        original_fps = main_cap.get(cv2.CAP_PROP_FPS)
-        main_frame_count = int(main_cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        main_duration = main_frame_count / original_fps if original_fps > 0 else 0
-
-        if main_width <= 0 or main_height <= 0:
-            raise ValueError(f"Invalid main video dimensions: {main_width}x{main_height}")
-
-        adjusted_fps = original_fps * speed_factor
-        fourcc = cv2.VideoWriter_fourcc(*'XVID')
-
-        out = cv2.VideoWriter(temp_avi, fourcc, adjusted_fps, (main_width, main_height))
-        if not out.isOpened():
-            raise IOError(f"Failed to create output video writer for {temp_avi}")
-
-        valid_positions = {'top_left', 'top_right', 'bottom_left', 'bottom_right', 'center', 'custom'}
-        if position not in valid_positions and not custom_layout:
-            raise ValueError(f"Invalid position. Must be one of: {', '.join(valid_positions)}")
-
         frame_count = 0
         while True:
             main_ret, main_frame = main_cap.read()
-            
+            overlay_ret, overlay_frame = overlay_cap.read()
+
             if not main_ret:
                 break
 
             frame_count += 1
             if frame_count % 100 == 0:
-                logger.info(f"Processed {frame_count} frames")
+                print(f"Processed {frame_count} frames")
 
-            overlay_ret, overlay_frame = overlay_cap.read()
             if not overlay_ret:
                 overlay_cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                 _, overlay_frame = overlay_cap.read()
-                if overlay_frame is None:
-                    raise ValueError("Failed to read frames from overlay video")
 
             overlay_height, overlay_width = overlay_frame.shape[:2]
             new_height = int(overlay_height * scale)
             new_width = int(overlay_width * scale)
             
             if new_height <= 0 or new_width <= 0:
-                raise ValueError(f"Overlay scale resulted in invalid dimensions: {new_width}x{new_height}")
+                raise ValueError("Overlay scale resulted in invalid dimensions")
                 
             overlay_resized = cv2.resize(overlay_frame, (new_width, new_height))
             h, w = overlay_resized.shape[:2]
@@ -256,188 +239,99 @@ async def process_video_overlay(main_video_path: str, overlay_video_path: str, o
             y_pos = max(0, min(y_pos, main_height - h))
 
             if y_pos + h > main_height or x_pos + w > main_width:
-                logger.warning(f"Overlay dimensions exceed main frame at frame {frame_count}, adjusting position")
-                x_pos = min(x_pos, main_width - w)
-                y_pos = min(y_pos, main_height - h)
-
-            roi_height = min(h, main_height - y_pos)
-            roi_width = min(w, main_width - x_pos)
-            
-            if roi_height <= 0 or roi_width <= 0:
-                logger.warning(f"Invalid ROI dimensions at frame {frame_count}, skipping overlay")
-                out.write(main_frame)
+                logger.warning(f"Overlay dimensions exceed main frame at frame {frame_count}")
                 continue
 
             if opacity < 1.0:
-                try:
-                    roi = main_frame[y_pos:y_pos+roi_height, x_pos:x_pos+roi_width]
-                    overlay_part = overlay_resized[:roi_height, :roi_width]
+                roi = main_frame[y_pos:y_pos+h, x_pos:x_pos+w]
+                if roi.shape[0] != h or roi.shape[1] != w:
+                    logger.warning(f"ROI shape mismatch at frame {frame_count}")
+                    continue
                     
-                    overlay_gray = cv2.cvtColor(overlay_part, cv2.COLOR_BGR2GRAY)
-                    _, mask = cv2.threshold(overlay_gray, 10, 255, cv2.THRESH_BINARY)
-                    mask_inv = cv2.bitwise_not(mask)
-                    
-                    background = cv2.bitwise_and(roi, roi, mask=mask_inv)
-                    foreground = cv2.addWeighted(overlay_part, opacity, np.zeros_like(overlay_part), 0, 0)
-                    foreground = cv2.bitwise_and(foreground, foreground, mask=mask)
-                    
-                    result = cv2.add(background, foreground)
-                    main_frame[y_pos:y_pos+roi_height, x_pos:x_pos+roi_width] = result
-                except Exception as e:
-                    logger.error(f"Error applying overlay with opacity at frame {frame_count}: {str(e)}")
+                overlay_gray = cv2.cvtColor(overlay_resized, cv2.COLOR_BGR2GRAY)
+                _, mask = cv2.threshold(overlay_gray, 10, 255, cv2.THRESH_BINARY)
+                mask_inv = cv2.bitwise_not(mask)
+                background = cv2.bitwise_and(roi, roi, mask=mask_inv)
+                foreground = cv2.addWeighted(overlay_resized, opacity, np.zeros_like(overlay_resized), 0, 0)
+                foreground = cv2.bitwise_and(foreground, foreground, mask=mask)
+                main_frame[y_pos:y_pos+h, x_pos:x_pos+w] = cv2.add(background, foreground)
             else:
-                try:
-                    main_frame[y_pos:y_pos+roi_height, x_pos:x_pos+roi_width] = overlay_resized[:roi_height, :roi_width]
-                except Exception as e:
-                    logger.error(f"Error applying overlay at frame {frame_count}: {str(e)}")
+                main_frame[y_pos:y_pos+h, x_pos:x_pos+w] = overlay_resized
 
             out.write(main_frame)
 
-        logger.info(f"Processed {frame_count} frames total")
-        
-        # Clean up OpenCV resources
+        print(f"Processed {frame_count} frames total.")
+
+        if frame_count == 0:
+            raise RuntimeError("No frames processed.")
+
+        # Base FFmpeg command
+        base_ffmpeg_cmd = [
+            'ffmpeg',
+            '-i', temp_output,
+            '-i', main_video_path,
+            '-stream_loop', '-1',
+            '-i', overlay_video_path,
+            '-c:v', 'libx264',
+            '-c:a', 'aac',
+            '-filter_complex',
+            f'[0:v]setpts={1/speed_factor}*PTS[v];'
+            f'[1:a]volume={main_volume}[main_a];'
+            f'[2:a]volume={overlay_volume}[overlay_a];'
+            '[main_a][overlay_a]amix=inputs=2:duration=longest[mixed_a]',
+            '-map', '[v]',
+            '-map', '[mixed_a]',
+            '-r', str(original_fps),
+            '-t', str(main_duration),
+            '-y'
+        ]
+
+        drive_result = None
+        if stream_to_drive:
+            # Streaming output to pipe
+            ffmpeg_cmd = base_ffmpeg_cmd.copy()
+            ffmpeg_cmd.extend(['-f', 'mp4', 'pipe:'])
+            logger.info(f"Executing FFmpeg streaming command: {' '.join(ffmpeg_cmd)}")
+            output_buffer = io.BytesIO()
+            process = subprocess.Popen(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            stdout, stderr = process.communicate()
+            if process.returncode != 0:
+                raise RuntimeError(f"FFmpeg failed: {stderr.decode()}")
+            output_buffer.write(stdout)
+            output_buffer.seek(0)
+            print(f"FFmpeg stderr: {stderr.decode()}")
+            
+            output_filename = os.path.basename(clean_filename(output_path) or "processed_video.mp4")
+            drive_result = upload_to_gdrive_stream(output_buffer, output_filename, folder_id)
+            output_buffer.close()
+        else:
+            # File output
+            ffmpeg_output = clean_filename(output_path) if output_path else tempfile.mktemp(suffix='.mp4')
+            ffmpeg_cmd = base_ffmpeg_cmd.copy()
+            ffmpeg_cmd.append(ffmpeg_output)
+            logger.info(f"Executing FFmpeg file command: {' '.join(ffmpeg_cmd)}")
+            process = subprocess.run(ffmpeg_cmd, check=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+            print(f"FFmpeg stderr: {process.stderr.decode()}")
+            
+            if not os.path.exists(ffmpeg_output):
+                raise RuntimeError("Output file not created.")
+            
+            if upload_to_drive:
+                drive_result = upload_to_drive(ffmpeg_output, folder_id)
+                if os.path.exists(ffmpeg_output):
+                    os.remove(ffmpeg_output)  # Clean up temporary file
+                return drive_result if drive_result else ffmpeg_output
+            return ffmpeg_output
+
+        return drive_result if stream_to_drive else ffmpeg_output
+
+    finally:
         main_cap.release()
         overlay_cap.release()
         out.release()
         cv2.destroyAllWindows()
-
-        if frame_count == 0:
-            raise RuntimeError("No frames were processed")
-
-        # Ensure the AVI file was created
-        if not os.path.exists(temp_avi) or os.path.getsize(temp_avi) == 0:
-            raise RuntimeError(f"Failed to create intermediate video file: {temp_avi}")
-
-        # Determine audio parameters from input files
-        main_has_audio = False
-        overlay_has_audio = False
-        
-        try:
-            probe_main = subprocess.run(
-                ['ffprobe', '-v', 'error', '-select_streams', 'a:0', '-show_entries', 
-                 'stream=codec_type', '-of', 'csv=p=0', main_video_path],
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-            )
-            main_has_audio = 'audio' in probe_main.stdout.strip()
-            
-            probe_overlay = subprocess.run(
-                ['ffprobe', '-v', 'error', '-select_streams', 'a:0', '-show_entries', 
-                 'stream=codec_type', '-of', 'csv=p=0', overlay_video_path],
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-            )
-            overlay_has_audio = 'audio' in probe_overlay.stdout.strip()
-        except Exception as e:
-            logger.warning(f"Error checking for audio streams: {str(e)}")
-            main_has_audio = True  # Assume audio exists if check fails
-            overlay_has_audio = True
-
-        # Build FFmpeg command
-        ffmpeg_cmd = ['ffmpeg', '-i', temp_avi]
-        filter_complex = []
-        mapping = []
-
-        # Video stream from temp_avi (input #0)
-        filter_complex.append(f'[0:v]setpts={1/speed_factor}*PTS[v]')
-        mapping.extend(['-map', '[v]'])
-
-        # Audio handling
-        input_count = 1  # Start with temp_avi as input #0
-        if main_has_audio:
-            ffmpeg_cmd.extend(['-i', main_video_path])
-            filter_complex.append(f'[{input_count}:a]volume={main_volume}[main_a]')
-            input_count += 1
-
-        if overlay_has_audio:
-            ffmpeg_cmd.extend(['-stream_loop', '-1', '-i', overlay_video_path])
-            filter_complex.append(f'[{input_count}:a]volume={overlay_volume}[overlay_a]')
-            input_count += 1
-
-        # Mix audio if both streams exist
-        if main_has_audio and overlay_has_audio:
-            filter_complex.append('[main_a][overlay_a]amix=inputs=2:duration=longest[mixed_a]')
-            mapping.extend(['-map', '[mixed_a]'])
-        elif main_has_audio:
-            mapping.extend(['-map', '[main_a]'])
-        elif overlay_has_audio:
-            mapping.extend(['-map', '[overlay_a]'])
-
-        # Add filter complex if it exists
-        if filter_complex:
-            ffmpeg_cmd.extend(['-filter_complex', ';'.join(filter_complex)])
-
-        # Finalize FFmpeg command
-        ffmpeg_cmd.extend(mapping)
-        ffmpeg_cmd.extend([
-            '-c:v', 'libx264',
-            '-c:a', 'aac',
-            '-r', str(adjusted_fps),  # Use adjusted_fps instead of original_fps
-            '-shortest',  # Ensure output duration matches the shortest input
-            '-y', temp_mp4
-        ])
-
-        if main_duration > 0:
-            ffmpeg_cmd.extend(['-t', str(main_duration)])
-
-        # Run FFmpeg
-        logger.info(f"Executing FFmpeg command: {' '.join(ffmpeg_cmd)}")
-        try:
-            process = subprocess.run(ffmpeg_cmd, check=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
-            logger.info(f"FFmpeg output: {process.stdout}")
-            logger.info(f"FFmpeg stderr: {process.stderr}")
-        except subprocess.CalledProcessError as e:
-            logger.error(f"FFmpeg error: {e.stderr}")
-            raise RuntimeError(f"FFmpeg processing failed: {e.stderr}")
-
-        if not os.path.exists(temp_mp4) or os.path.getsize(temp_mp4) == 0:
-            raise RuntimeError("FFmpeg failed to create output file")
-
-        drive_result = None
-        if stream_to_drive or folder_id:
-            # Upload the temporary MP4 to Google Drive
-            output_filename = os.path.basename(clean_filename(output_path) or "processed_video.mp4")
-            
-            try:
-                with open(temp_mp4, 'rb') as file_data:
-                    file_buffer = io.BytesIO(file_data.read())
-                    
-                if stream_to_drive:
-                    drive_result = upload_to_gdrive_stream(file_buffer, output_filename, folder_id)
-                else:
-                    drive_result = upload_to_drive(temp_mp4, folder_id)
-                    
-                logger.info(f"Successfully uploaded to Google Drive: {drive_result}")
-                return drive_result
-            except Exception as e:
-                logger.error(f"Failed to upload to Google Drive: {str(e)}")
-                if not os.path.exists(OUTPUT_FOLDER):
-                    os.makedirs(OUTPUT_FOLDER, exist_ok=True)
-                # If upload fails, save locally as a fallback
-                final_output = os.path.join(OUTPUT_FOLDER, output_filename)
-                shutil.copy2(temp_mp4, final_output)
-                logger.info(f"Saved to local file as fallback: {final_output}")
-                return final_output
-        else:
-            # Move temporary MP4 to final location
-            if not os.path.exists(OUTPUT_FOLDER):
-                os.makedirs(OUTPUT_FOLDER, exist_ok=True)
-                
-            final_output = os.path.join(OUTPUT_FOLDER, os.path.basename(clean_filename(output_path) or "processed_video.mp4"))
-            shutil.copy2(temp_mp4, final_output)
-            logger.info(f"Saved to local file: {final_output}")
-            return final_output
-
-    except Exception as e:
-        logger.error(f"Error in video processing: {str(e)}")
-        raise
-    finally:
-        # Clean up temporary files
-        for temp_file in [temp_avi, temp_mp4]:
-            try:
-                if temp_file and os.path.exists(temp_file):
-                    os.remove(temp_file)
-                    logger.info(f"Removed temporary file: {temp_file}")
-            except Exception as e:
-                logger.warning(f"Failed to remove temporary file {temp_file}: {str(e)}")
+        if os.path.exists(temp_output):
+            os.remove(temp_output)
 
 @app.post("/process-video/")
 async def process_video_endpoint(
