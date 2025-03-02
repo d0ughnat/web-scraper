@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import axios from 'axios';
-import './Over.css';
+import './over.css';
 
 function Over() {
   const [mainVideo, setMainVideo] = useState(null);
