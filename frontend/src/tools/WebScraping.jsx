@@ -85,7 +85,7 @@ function WebScraper() {
         console.log(pair[0] + ': ' + pair[1]);
       }
       
-      const response = await fetch('http://localhost:8000/scrape', {
+      const response = await fetch('https://web-scraper-dl2q.onrender.com/scrape', {
         method: 'POST',
         body: apiFormData,
       });
@@ -328,7 +328,7 @@ function WebScraper() {
                           </a>
                         )}
                         {!item.drive_link && item.filename && (
-                          <a href={`http://localhost:8000/download/${item.filename}`} target="_blank" rel="noopener noreferrer">
+                          <a href={`https://web-scraper-dl2q.onrender.com/download/${item.filename}`} target="_blank" rel="noopener noreferrer">
                             Download
                           </a>
                         )}
