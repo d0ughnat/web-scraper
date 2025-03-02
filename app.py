@@ -622,19 +622,30 @@ async def download_file(filename: str):
     # Sanitize filename
     clean_name = clean_filename(filename)
     
-    # Try several possible locations
+    # First, handle potential prefix issue in the error message
+    if clean_name.startswith("outputs_"):
+        # Remove the "outputs_" prefix that shouldn't be there
+        clean_name = clean_name[8:]
+        logger.info(f"Removed 'outputs_' prefix from filename, new name: {clean_name}")
+    
+    # Check if the file exists directly in the output folder
     file_path = os.path.join(OUTPUT_FOLDER, clean_name)
     
     # If file doesn't exist, check with mp4 extension
     if not os.path.exists(file_path) and not clean_name.endswith('.mp4'):
         file_path = os.path.join(OUTPUT_FOLDER, f"{clean_name}.mp4")
     
-    # If still not found, try finding by base name
+    # If still not found, try finding by base name (more thorough search)
     if not os.path.exists(file_path):
         base_name = os.path.splitext(clean_name)[0]
+        # Log all files in output directory for debugging
+        all_files = os.listdir(OUTPUT_FOLDER)
+        logger.info(f"All files in {OUTPUT_FOLDER}: {all_files}")
+        
+        # More aggressive matching - check if base name is contained in any file
         potential_matches = [
-            f for f in os.listdir(OUTPUT_FOLDER) 
-            if f.startswith(base_name) or base_name in f
+            f for f in all_files 
+            if base_name in f
         ]
         
         if potential_matches:
@@ -644,6 +655,7 @@ async def download_file(filename: str):
                 key=lambda f: os.path.getmtime(os.path.join(OUTPUT_FOLDER, f))
             )
             file_path = os.path.join(OUTPUT_FOLDER, most_recent)
+            logger.info(f"Found approximate match: {most_recent}")
     
     if os.path.exists(file_path):
         logger.info(f"Serving file: {file_path}")
@@ -653,19 +665,15 @@ async def download_file(filename: str):
             media_type="video/mp4"
         )
     
-    # Log the error
-    logger.error(f"File not found: {filename}. Attempted path: {file_path}")
-    logger.info(f"Available files in {OUTPUT_FOLDER}: {os.listdir(OUTPUT_FOLDER)}")
+    # Try directly serving from original filename as last resort
+    original_file_path = os.path.join(OUTPUT_FOLDER, filename)
+    if os.path.exists(original_file_path):
+        logger.info(f"Serving original filename: {original_file_path}")
+        return FileResponse(
+            original_file_path, 
+            filename=filename, 
+            media_type="video/mp4"
+        )
     
-    raise HTTPException(
-        status_code=404, 
-        detail=f"File not found: {filename}. Please check if the file was processed successfully."
-    )
-
-@app.get("/health")
-async def health_check():
-    """Health check endpoint"""
-    return {"status": "healthy", "version": "1.0.0"}
-
-# Add extra imports needed above
-import time
+    # Log the error
+    logger.error(f"File not found: {filename}. Attempted paths: {file_path}, {
