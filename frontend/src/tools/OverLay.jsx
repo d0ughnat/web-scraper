@@ -6,7 +6,7 @@ import {
 } from '@mui/material';
 import './over.css';
 
-const API_BASE_URL = 'http://localhost:8001';
+const API_BASE_URL = 'https://web-scraper-1-gtjl.onrender.com';
 
 function Over() {
   const [mainVideo, setMainVideo] = useState(null);

@@ -57,7 +57,7 @@ def clean_filename(filename: str) -> str:
 def extract_folder_id(folder_input: str) -> str:
     """Extract folder ID from either a full Google Drive URL or a plain ID."""
     if not folder_input:
-        return None
+-stopped here-        return None
     if folder_input.startswith('http'):
         match = re.search(r'folders/([a-zA-Z0-9_-]+)', folder_input)
         if match:
@@ -328,69 +328,66 @@ async def process_video_overlay(main_video_path: str, overlay_video_path: str, o
             overlay_has_audio = 'audio' in probe_overlay.stdout.strip()
         except Exception as e:
             logger.warning(f"Error checking for audio streams: {str(e)}")
-            # Assume both have audio if we can't check
-            main_has_audio = True
+            main_has_audio = True  # Assume audio exists if check fails
             overlay_has_audio = True
 
-        # Build FFmpeg command based on available audio
-        ffmpeg_cmd = [
-            'ffmpeg',
-            '-i', temp_avi
-        ]
-        
+        # Build FFmpeg command
+        ffmpeg_cmd = ['ffmpeg', '-i', temp_avi]
         filter_complex = []
         mapping = []
-        
-        # Add video input and filter
+
+        # Video stream from temp_avi (input #0)
         filter_complex.append(f'[0:v]setpts={1/speed_factor}*PTS[v]')
         mapping.extend(['-map', '[v]'])
-        
-        # Add audio inputs if available
-        audio_inputs = []
+
+        # Audio handling
+        input_count = 1  # Start with temp_avi as input #0
         if main_has_audio:
             ffmpeg_cmd.extend(['-i', main_video_path])
-            audio_inputs.append(f'[{len(ffmpeg_cmd) // 2 - 1}:a]volume={main_volume}[main_a]')
-        
+            filter_complex.append(f'[{input_count}:a]volume={main_volume}[main_a]')
+            input_count += 1
+
         if overlay_has_audio:
             ffmpeg_cmd.extend(['-stream_loop', '-1', '-i', overlay_video_path])
-            audio_inputs.append(f'[{len(ffmpeg_cmd) // 2 - 1}:a]volume={overlay_volume}[overlay_a]')
-        
-        # Add audio mixing if needed
-        if len(audio_inputs) > 0:
-            filter_complex.extend(audio_inputs)
-            
-            if len(audio_inputs) > 1:
-                filter_complex.append('[main_a][overlay_a]amix=inputs=2:duration=longest[mixed_a]')
-                mapping.extend(['-map', '[mixed_a]'])
-            else:
-                # Only one audio stream
-                mapping.extend(['-map', '[main_a]' if main_has_audio else '[overlay_a]'])
-        
-        # Complete FFmpeg command
+            filter_complex.append(f'[{input_count}:a]volume={overlay_volume}[overlay_a]')
+            input_count += 1
+
+        # Mix audio if both streams exist
+        if main_has_audio and overlay_has_audio:
+            filter_complex.append('[main_a][overlay_a]amix=inputs=2:duration=longest[mixed_a]')
+            mapping.extend(['-map', '[mixed_a]'])
+        elif main_has_audio:
+            mapping.extend(['-map', '[main_a]'])
+        elif overlay_has_audio:
+            mapping.extend(['-map', '[overlay_a]'])
+
+        # Add filter complex if it exists
         if filter_complex:
             ffmpeg_cmd.extend(['-filter_complex', ';'.join(filter_complex)])
-        
+
+        # Finalize FFmpeg command
         ffmpeg_cmd.extend(mapping)
         ffmpeg_cmd.extend([
             '-c:v', 'libx264',
             '-c:a', 'aac',
-            '-r', str(original_fps)
+            '-r', str(adjusted_fps),  # Use adjusted_fps instead of original_fps
+            '-shortest',  # Ensure output duration matches the shortest input
+            '-y', temp_mp4
         ])
-        
+
         if main_duration > 0:
             ffmpeg_cmd.extend(['-t', str(main_duration)])
-            
-        ffmpeg_cmd.extend(['-y', temp_mp4])
-        
-        # Run FFmpeg to create the MP4 file
+
+        # Run FFmpeg
         logger.info(f"Executing FFmpeg command: {' '.join(ffmpeg_cmd)}")
         try:
-            process = subprocess.run(ffmpeg_cmd, check=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
-            logger.info(f"FFmpeg stderr: {process.stderr.decode()}")
+            process = subprocess.run(ffmpeg_cmd, check=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+            logger.info(f"FFmpeg output: {process.stdout}")
+            logger.info(f"FFmpeg stderr: {process.stderr}")
         except subprocess.CalledProcessError as e:
-            logger.error(f"FFmpeg error: {e.stderr.decode() if e.stderr else str(e)}")
-            raise RuntimeError(f"FFmpeg processing failed: {e.stderr.decode() if e.stderr else str(e)}")
-        
+            logger.error(f"FFmpeg error: {e.stderr}")
+            raise RuntimeError(f"FFmpeg processing failed: {e.stderr}")
+
         if not os.path.exists(temp_mp4) or os.path.getsize(temp_mp4) == 0:
             raise RuntimeError("FFmpeg failed to create output file")
 
