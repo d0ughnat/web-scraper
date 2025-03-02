@@ -447,11 +447,31 @@ async def upload_to_drive_endpoint(
 
 @app.get("/download/{filename}")
 async def download_file(filename: str):
+    # First try the direct path
     file_path = os.path.join(OUTPUT_FOLDER, clean_filename(filename))
+    
+    # If file doesn't exist, check if it might have an mp4 extension
+    if not os.path.exists(file_path) and not filename.endswith('.mp4'):
+        file_path = os.path.join(OUTPUT_FOLDER, clean_filename(filename) + '.mp4')
+    
+    # If file still doesn't exist, try finding any file that might match the base name
+    if not os.path.exists(file_path):
+        base_name = os.path.splitext(clean_filename(filename))[0]
+        for file in os.listdir(OUTPUT_FOLDER):
+            if file.startswith(base_name):
+                file_path = os.path.join(OUTPUT_FOLDER, file)
+                break
+    
     if os.path.exists(file_path):
-        return FileResponse(file_path, filename=filename, media_type="video/mp4")
-    raise HTTPException(status_code=404, detail="File not found")
+        return FileResponse(file_path, filename=os.path.basename(file_path), media_type="video/mp4")
+    
+    # Log the attempted file access for debugging
+    logger.error(f"File not found: {filename}. Attempted path: {file_path}")
+    logger.info(f"Available files in {OUTPUT_FOLDER}: {os.listdir(OUTPUT_FOLDER)}")
+    
+    raise HTTPException(
+        status_code=404, 
+        detail=f"File not found: {filename}. Please check if the file was processed successfully."
+    )
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+
