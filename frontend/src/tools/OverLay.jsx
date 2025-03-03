@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import axios from 'axios';
-import './over.css';
 
 function Over() {
   const [mainVideo, setMainVideo] = useState(null);
@@ -9,21 +8,21 @@ function Over() {
   const [scale, setScale] = useState(0.3);
   const [mainVolume, setMainVolume] = useState(1.0);
   const [overlayVolume, setOverlayVolume] = useState(1.0);
-  const [speedFactor, setSpeedFactor] = useState(1.0);
+  const [speedFactor, setSpeedFactor] = useState(1.0); // Consistent camelCase
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [downloadUrl, setDownloadUrl] = useState(null);
+  const [error, setError] = useState('');
+  const [downloadUrl, setDownloadUrl] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!mainVideo || !overlayVideo) {
-      setError('Please upload both main and overlay videos.');
+      setError('Please upload both videos.');
       return;
     }
 
     setLoading(true);
-    setError(null);
-    setDownloadUrl(null);
+    setError('');
+    setDownloadUrl('');
 
     const formData = new FormData();
     formData.append('main_video', mainVideo);
@@ -32,18 +31,16 @@ function Over() {
     formData.append('scale', scale);
     formData.append('main_volume', mainVolume);
     formData.append('overlay_volume', overlayVolume);
-    formData.append('speed_factor', speedFactor);
+    formData.append('speed_factor', speedFactor); // Changed to speedFactor to match state
 
     try {
       const response = await axios.post('http://localhost:8000/overlay-video/', formData, {
-        responseType: 'blob', // Important for handling binary data (video file)
+        responseType: 'blob',
       });
-
-      // Create a URL for the downloaded file
-      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'video/mp4' }));
+      const url = window.URL.createObjectURL(new Blob([response.data]));
       setDownloadUrl(url);
     } catch (err) {
-      setError(err.response?.data?.detail || 'An error occurred while processing the video.');
+      setError(err.response?.data?.detail || 'An error occurred.');
     } finally {
       setLoading(false);
     }
@@ -81,7 +78,7 @@ function Over() {
           </select>
         </div>
         <div>
-          <label>Scale (0.0-1.0):</label>
+          <label>Scale (0-1):</label>
           <input
             type="number"
             step="0.1"
@@ -129,14 +126,11 @@ function Over() {
           {loading ? 'Processing...' : 'Process Video'}
         </button>
       </form>
-
-      {error && <p style={{ color: 'red' }}>{error}</p>}
+      {error && <p className="error">{error}</p>}
       {downloadUrl && (
         <div>
-          <p>Processing complete! Download your video:</p>
-          <a href={downloadUrl} download="output_video.mp4">
-            <button>Download Video</button>
-          </a>
+          <p>Success!</p>
+          <a href={downloadUrl} download="output_video.mp4">Download Video</a>
         </div>
       )}
     </div>
